@@ -2494,7 +2494,30 @@ static int _hybris_hook_my_printf(const char *tmp, ...)
     return fprintf(stderr, "%d:%s", syscall(__NR_gettid), buff);
 }
 
+static __thread int stored_fd = -1;
+
+static void debug_hwc_info(void *s, int debug_tag, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    if(strstr(format, "Commit Input") != NULL)
+    {
+        // this means hwcomposer is leaving the function Commit soon. the last fd was dupped is leaked (and never used) so close it.
+        close(stored_fd);
+    }
+    va_end(args);
+}
+
+int _hybris_hook_dup(int fd)
+{
+    stored_fd = dup(fd);
+    return stored_fd;
+}
+
 static struct _hook hooks_common[] = {
+    /* funky hwcomposer workaround */
+    HOOK_TO(_ZN3sdm15HWCDebugHandler4InfoENS_8DebugTagEPKcz, debug_hwc_info),
+    HOOK_INDIRECT(dup),
 #ifdef WANT_INITIALIZE_BIONIC
     HOOK_TO(glibc_malloc, malloc),
     HOOK_INDIRECT(my_printf),
